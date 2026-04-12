@@ -2,6 +2,7 @@ from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel, Field
 from typing import List, Dict, Any, Literal, Optional
 import json
+from tasks.scoring import clamp_open_unit_interval
 
 app = FastAPI()
 
@@ -110,13 +111,19 @@ async def step(action: Action):
         done = True
         
     if done:
+        terminal_state = dict(STATE)
+        terminal_state["obs"] = new_obs
+        terminal_state["step"] = STATE["step"]
+        terminal_state["done"] = done
+
         # compute final bonus
         if task == "text-cleaning":
-            score = grade_task1(STATE)
+            score = grade_task1(terminal_state)
         elif task == "label-correction":
-            score = grade_task2(STATE)
+            score = grade_task2(terminal_state)
         else:
-            score = grade_task3(STATE)
+            score = grade_task3(terminal_state)
+        score = clamp_open_unit_interval(score)
         
         # Grading is added into state for logging and info
         STATE["score"] = score

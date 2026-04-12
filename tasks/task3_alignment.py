@@ -1,4 +1,5 @@
 from copy import deepcopy
+from tasks.scoring import clamp_open_unit_interval
 
 def get_initial_obs_task3():
     dataset = [
@@ -86,4 +87,4 @@ def grade_task3(state):
     if pos > 0 and neg > 0 and abs(pos - neg) <= 1:
         score += 0.3
         
-    return round(score, 2)
+    return round(clamp_open_unit_interval(score), 3)

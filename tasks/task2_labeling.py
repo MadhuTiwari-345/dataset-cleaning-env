@@ -1,4 +1,5 @@
 from copy import deepcopy
+from tasks.scoring import clamp_open_unit_interval
 
 def get_initial_obs_task2():
     dataset = [{
@@ -58,8 +59,9 @@ def grade_task2(state):
     ground_truth = "negative"
     
     if final_label == ground_truth:
-        return 1.0
+        score = 1.0
     elif state["obs"]["confidence"] < 0.4:  # initial confidence was close to threshold
-        return 0.4
+        score = 0.4
     else:
-        return 0.0
+        score = 0.0
+    return round(clamp_open_unit_interval(score), 3)

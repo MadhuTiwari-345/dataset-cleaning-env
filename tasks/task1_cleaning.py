@@ -1,5 +1,6 @@
 from copy import deepcopy
 import Levenshtein
+from tasks.scoring import clamp_open_unit_interval
 
 def get_initial_obs_task1():
     dataset = [{
@@ -70,4 +71,4 @@ def grade_task1(state):
     if dist <= 2:
         score += 0.5
         
-    return round(score, 2)
+    return round(clamp_open_unit_interval(score), 3)
