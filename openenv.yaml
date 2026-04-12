@@ -1,0 +1,25 @@
+name: dataset-cleaning-env
+version: "1.0.0"
+description: >
+  RL environment simulating ML dataset cleaning and alignment.
+  An agent fixes typos, corrects labels, removes duplicates, and aligns
+  dataset distributions across three tasks of increasing difficulty.
+tags:
+  - openenv
+  - data-cleaning
+  - nlp
+  - alignment
+  - real-world
+tasks:
+  - id: text-cleaning
+    difficulty: easy
+    max_steps: 5
+  - id: label-correction
+    difficulty: medium
+    max_steps: 8
+  - id: dataset-alignment
+    difficulty: hard
+    max_steps: 15
+observation_space: structured_json
+action_space: discrete_typed
+reward_range: [-1.0, 1.0]

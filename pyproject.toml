@@ -1,0 +1,21 @@
+[build-system]
+requires = ["setuptools", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "dataset-cleaning-env"
+version = "1.0.0"
+description = "RL environment simulating ML dataset cleaning and alignment"
+dependencies = [
+    "fastapi",
+    "uvicorn",
+    "pydantic",
+    "openai",
+    "requests",
+    "httpx",
+    "openenv-core",
+    "Levenshtein"
+]
+
+[project.scripts]
+server = "server.app:main"

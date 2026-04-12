@@ -1,0 +1,44 @@
+[
+  {
+    "sample_id": "1",
+    "text": "Ths prodct is absolutly amazng",
+    "label": "positive",
+    "issues": ["typo"],
+    "confidence": 0.95
+  },
+  {
+    "sample_id": "2",
+    "text": "I absolutely hate this, worst purchase ever",
+    "label": "positive",
+    "issues": ["wrong_label"],
+    "confidence": 0.35
+  },
+  {
+    "sample_id": "3a",
+    "text": "This is great!",
+    "label": "positive",
+    "issues": [],
+    "confidence": 0.9
+  },
+  {
+    "sample_id": "3b",
+    "text": "This is great!",
+    "label": "negative",
+    "issues": ["duplicate", "wrong_label"],
+    "confidence": 0.4
+  },
+  {
+    "sample_id": "3c",
+    "text": "Horrible item.",
+    "label": "negative",
+    "issues": [],
+    "confidence": 0.9
+  },
+  {
+    "sample_id": "3d",
+    "text": "I really love it.",
+    "label": "negative",
+    "issues": ["wrong_label"],
+    "confidence": 0.3
+  }
+]

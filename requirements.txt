@@ -1,0 +1,8 @@
+fastapi
+uvicorn
+pydantic
+openai
+requests
+httpx
+openenv-core
+Levenshtein
