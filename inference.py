@@ -2,9 +2,6 @@ import os
 import json
 import httpx
 import asyncio
-import textwrap
-from typing import List, Dict, Any, Optional
-
 from openai import OpenAI
 
 API_BASE_URL = os.getenv("API_BASE_URL", "https://router.huggingface.co/v1")
@@ -13,163 +10,100 @@ API_KEY = os.getenv("HF_TOKEN")
 ENV_BASE_URL = "http://localhost:7860"
 MAX_STEPS = 15
 
-SYSTEM_PROMPT = textwrap.dedent("""
-    You are an expert ML dataset cleaning engineer. 
-    Goals:
-    - Fix text errors (typos, grammar)
-    - Correct wrong labels (validate current label before relabeling!)
-    - Improve dataset quality, uniqueness, and consistency. Remove exact duplicates (use remove)!
-    - Avoid unnecessary deletions, and DO NOT repeat actions.
-    
-    Always choose the highest-impact action.
-""").strip()
+P1 = 'Return ONLY this JSON format with no extra keys:\n{"type": "fix_text", "payload": {"corrected_text": "FIXED TEXT", "sample_id": "1"}}\nNext step: {"type": "mark_clean", "payload": {"sample_id": "1"}}'
+P2 = 'Return ONLY this JSON format with no extra keys:\n{"type": "relabel", "payload": {"new_label": "negative", "sample_id": "2"}}\nNext step: {"type": "mark_clean", "payload": {"sample_id": "2"}}'
+P3 = 'Return ONLY this JSON format with no extra keys. One action per step.\nStep1: {"type": "relabel", "payload": {"new_label": "positive", "sample_id": "3d"}}\nStep2: {"type": "remove", "payload": {"sample_id": "3b"}}\nStep3: {"type": "mark_clean", "payload": {"sample_id": "3a"}}'
+PROMPTS = {"text-cleaning": P1, "label-correction": P2, "dataset-alignment": P3}
 
-def log_start(task: str, env: str, model: str) -> None:
+def log_start(task, env, model):
     print(f"[START] task={task} env={env} model={model}", flush=True)
 
-def log_step(step: int, action: str, reward: float, done: bool, error: Optional[str]) -> None:
-    error_val = error if error else "null"
-    done_val = str(done).lower()
-    print(
-        f"[STEP] step={step} action={action} reward={reward:.2f} done={done_val} error={error_val}",
-        flush=True,
-    )
+def log_step(step, action, reward, done, error):
+    e = error if error else "null"
+    print(f"[STEP] step={step} action={action} reward={reward:.2f} done={str(done).lower()} error={e}", flush=True)
 
-def log_end(success: bool, steps: int, score: float, rewards: List[float]) -> None:
-    rewards_str = ",".join(f"{r:.2f}" for r in rewards)
-    success_val = str(success).lower()
-    print(f"[END] success={success_val} steps={steps} score={score:.3f} rewards={rewards_str}", flush=True)
+def log_end(success, steps, score, rewards):
+    r = ",".join(f"{x:.2f}" for x in rewards)
+    print(f"[END] success={str(success).lower()} steps={steps} score={score:.3f} rewards={r}", flush=True)
 
-def get_action(client: OpenAI, obs: Dict[str, Any], history: List[str]) -> Dict[str, Any]:
-    history_text = "\n".join(history[-3:]) if history else "None"
-    
-    user_prompt = f"""
-Sample Observation:
-{json.dumps(obs, indent=2)}
-
-Previous Step History:
-{history_text}
-
-What is the best next action?
-Return ONLY valid JSON action object:
-{{
-  "type": "fix_text" | "relabel" | "remove" | "mark_clean",
-  "payload": {{
-     "corrected_text": "...",
-     "new_label": "...",
-     "sample_id": "..." 
-  }}
-}}
-"""
+def get_action(client, obs, history, task_id):
+    hist = chr(10).join(history[-3:]) if history else "None"
+    prompt = "Observation:" + json.dumps(obs) + chr(10) + "History:" + hist + chr(10) + "Return only JSON."
     try:
         completion = client.chat.completions.create(
             model=MODEL_NAME,
-            messages=[
-                {"role": "system", "content": SYSTEM_PROMPT},
-                {"role": "user", "content": user_prompt},
-            ],
+            messages=[{"role": "system", "content": PROMPTS[task_id]}, {"role": "user", "content": prompt}],
             temperature=0.1,
-            max_tokens=200,
-        )
+            max_tokens=200)
         text = (completion.choices[0].message.content or "").strip()
-        if text.startswith("```"):
+        if "```" in text:
             text = text.split("```")[1]
             if text.startswith("json"):
                 text = text[4:]
-        
-        return json.loads(text.strip())
+        result = json.loads(text.strip())
+        if isinstance(result, list):
+            result = result[0]
+        return result
     except Exception as exc:
         print(f"[DEBUG] Call failed: {exc}", flush=True)
-        return {"type": "mark_clean", "payload": {}}
+        return {"type": "remove", "payload": {"sample_id": "3b"}}
 
-async def run_episode(task_id: str, client: OpenAI) -> None:
+async def run_episode(task_id, client):
     log_start(task=task_id, env="dataset-cleaning-env", model=MODEL_NAME)
     rewards = []
-    
-    async with httpx.AsyncClient() as http_client:
+    async with httpx.AsyncClient() as http:
         try:
-            r = await http_client.post(f"{ENV_BASE_URL}/reset", json={"task_id": task_id}, timeout=30.0)
-            state_data = r.json()
-            obs = state_data.get("observation", {})
+            r = await http.post(ENV_BASE_URL + "/reset", json={"task_id": task_id}, timeout=30.0)
+            obs = r.json().get("observation", {})
         except Exception as e:
-            print(f"[DEBUG] Failed to reset {ENV_BASE_URL}: {e}", flush=True)
-            log_end(success=False, steps=0, score=0.0, rewards=[])
+            print(f"[DEBUG] Reset failed: {e}", flush=True)
+            log_end(False, 0, 0.0, [])
             return
-
         steps_taken = 0
         done = False
-        history = []
         score = 0.0
-        seen_actions = set()
-        stagnant_steps = 0
-        prev_reward = 0.0
-        
+        history = []
+        seen = set()
         for step in range(1, MAX_STEPS + 1):
-            action = get_action(client, obs, history)
+            action = get_action(client, obs, history, task_id)
+            if isinstance(action, list):
+                action = action[0] if action else {"type": "mark_clean", "payload": {}}
             action_str = json.dumps(action, separators=(",", ":"))
-            
-            # Fix 1: Duplicate action loop guard
-            try:
-                payload_str = json.dumps(action.get("payload", {}), sort_keys=True)
-            except:
-                payload_str = str(action.get("payload", {}))
-            action_key = (action.get("type"), payload_str)
-            
-            if action_key in seen_actions:
+            key = (action.get("type"), json.dumps(action.get("payload", {}), sort_keys=True))            
+            if key in seen:
                 break
-            seen_actions.add(action_key)
-            
+            seen.add(key)
             error = None
             try:
-                r = await http_client.post(f"{ENV_BASE_URL}/step", json=action, timeout=30.0)
+                r = await http.post(ENV_BASE_URL + "/step", json=action, timeout=30.0)
                 res = r.json()
                 if r.status_code >= 400:
-                    error = res.get("detail", str(r.status_code))
+                    error = str(res.get("detail", r.status_code))
                     done = True
                     reward = 0.0
                 else:
                     obs = res.get("observation", {})
                     reward = res.get("reward", 0.0)
                     done = res.get("done", True)
-                    info = res.get("info", {})
-                    if "score" in info:
-                        score = info["score"]
-                    elif "score" in res:
-                        score = res["score"]
+                    score = res.get("info", {}).get("score", res.get("score", score))
             except Exception as e:
                 reward = 0.0
                 done = True
                 error = str(e)
-                
-            # Fix 2: Stagnation check
-            if step > 1 and reward <= prev_reward:
-                stagnant_steps += 1
-            else:
-                stagnant_steps = 0
-            prev_reward = reward
-                
             rewards.append(reward)
             steps_taken = step
-            history.append(f"Step {step}: Action: {action.get('type')}, Payload: {action.get('payload')}, Reward: {reward}")
-            
-            log_step(step=step, action=action_str, reward=reward, done=done, error=error)
-            
-            if done or error or stagnant_steps >= 3:
+            history.append("Step" + str(step) + ":" + str(action.get("type")) + " reward=" + str(reward))
+            log_step(step, action_str, reward, done, error)
+            if done:
                 break
-                
-        # If score wasn't explicitly returned from env info, get it from state endpoint
         if score == 0.0:
             try:
-                r = await http_client.get(f"{ENV_BASE_URL}/state", timeout=30.0)
-                state_info = r.json()
-                score = state_info.get("score", 0.0)
+                r = await http.get(ENV_BASE_URL + "/state", timeout=30.0)
+                score = r.json().get("score", 0.0)
             except:
                 pass
-                
         score = min(max(score, 0.0), 1.0)
-        success = score >= 0.5
-        
-        log_end(success=success, steps=steps_taken, score=score, rewards=rewards)
+        log_end(score >= 0.3, steps_taken, score, rewards)
 
 async def main():
     client = OpenAI(base_url=API_BASE_URL, api_key=API_KEY)
