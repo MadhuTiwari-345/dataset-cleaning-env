@@ -36,7 +36,7 @@
 
 ## 🌍 Overview
 
-The **Dataset Cleaning & Alignment Engine** simulates the real-world ML engineering workflow of cleaning, correcting, and aligning training datasets before model training. Every ML team performs these tasks — this environment turns that workflow into a structured RL benchmark.
+The **Dataset Cleaning & Alignment Engine** simulates the real-world ML engineering workflow of cleaning, correcting, and aligning training datasets before model training. Every ML team performs these tasks this environment turns that workflow into a structured RL benchmark.
 
 An AI agent receives noisy, real-world-style dataset samples and must take corrective actions over multiple steps to improve quality. The environment tracks partial progress and rewards improvement at each step, making it ideal for training and evaluating reasoning agents.
 
